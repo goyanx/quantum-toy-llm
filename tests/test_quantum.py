@@ -19,3 +19,15 @@ def test_reuploading_quantum_backward():
     assert y.shape == x.shape
     y.square().mean().backward()
     assert q.input_scale.grad is not None
+
+
+def test_training_dissipation_is_finite_and_eval_disables_effect():
+    layer = QuantumBottleneck(d_model=8, n_qubits=3, circuit_layers=1, reupload=True)
+    x = torch.randn(2, 4, 8)
+    layer.train()
+    layer.training_dissipation = 0.03
+    y_train = layer(x)
+    assert torch.isfinite(y_train).all()
+    layer.eval()
+    y_eval = layer(x)
+    assert torch.isfinite(y_eval).all()
