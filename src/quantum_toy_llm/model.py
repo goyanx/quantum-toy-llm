@@ -6,6 +6,7 @@ from torch import nn
 import torch.nn.functional as F
 
 from .quantum import QuantumBottleneck
+from .tensor_train import TensorTrainFFN
 
 
 @dataclass
@@ -20,6 +21,9 @@ class TinyGPTConfig:
     mode: str = "classical"  # classical | bottleneck | quantum
     n_qubits: int = 4
     circuit_layers: int = 2
+    quantum_reupload: bool = False
+    quantum_topology: str = "ring"
+    tt_rank: int = 2
 
 
 class ClassicalFFN(nn.Module):
@@ -53,9 +57,9 @@ class BottleneckFFN(nn.Module):
 
 
 class QuantumFFN(nn.Module):
-    def __init__(self, d_model: int, n_qubits: int, circuit_layers: int, dropout: float):
+    def __init__(self, d_model: int, n_qubits: int, circuit_layers: int, dropout: float, reupload: bool = False, topology: str = "ring"):
         super().__init__()
-        self.quantum = QuantumBottleneck(d_model, n_qubits, circuit_layers)
+        self.quantum = QuantumBottleneck(d_model, n_qubits, circuit_layers, reupload=reupload, topology=topology)
         self.activation = nn.GELU()
         self.dropout = nn.Dropout(dropout)
 
@@ -67,14 +71,21 @@ class Block(nn.Module):
     def __init__(self, cfg: TinyGPTConfig):
         super().__init__()
         self.ln1 = nn.LayerNorm(cfg.d_model)
-        self.attn = nn.MultiheadAttention(cfg.d_model, cfg.n_heads, dropout=cfg.dropout, batch_first=True)
+        self.attn = nn.MultiheadAttention(
+            cfg.d_model,
+            cfg.n_heads,
+            dropout=cfg.dropout,
+            batch_first=True,
+        )
         self.ln2 = nn.LayerNorm(cfg.d_model)
         if cfg.mode == "classical":
             self.ffn = ClassicalFFN(cfg.d_model, cfg.ffn_mult, cfg.dropout)
         elif cfg.mode == "bottleneck":
             self.ffn = BottleneckFFN(cfg.d_model, cfg.n_qubits, cfg.dropout)
         elif cfg.mode == "quantum":
-            self.ffn = QuantumFFN(cfg.d_model, cfg.n_qubits, cfg.circuit_layers, cfg.dropout)
+            self.ffn = QuantumFFN(cfg.d_model, cfg.n_qubits, cfg.circuit_layers, cfg.dropout, cfg.quantum_reupload, cfg.quantum_topology)
+        elif cfg.mode == "mps":
+            self.ffn = TensorTrainFFN(cfg.d_model, rank=cfg.tt_rank, dropout=cfg.dropout)
         else:
             raise ValueError(f"unknown mode: {cfg.mode}")
 
