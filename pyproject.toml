@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantum-toy-llm"
+version = "0.1.0"
+description = "Tiny GPT experiment comparing a classical FFN with a differentiable quantum bottleneck."
+requires-python = ">=3.10"
+dependencies = [
+  "torch>=2.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+qtllm-train = "quantum_toy_llm.train:main"
+qtllm-compare = "quantum_toy_llm.compare:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
