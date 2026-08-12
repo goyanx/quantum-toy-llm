@@ -77,6 +77,10 @@ class QuantumBottleneck(nn.Module):
         self.circuit_layers = circuit_layers
         self.reupload = reupload
         self.topology = topology
+        # Optional training-time non-unitary contraction used only in the
+        # Nature-inspired optimization experiment. Keep at 0.0 for the
+        # standard model. The experiment anneals this back to zero.
+        self.training_dissipation = 0.0
         self.encoder = nn.Linear(d_model, n_qubits)
         self.theta_ry = nn.Parameter(torch.zeros(circuit_layers, n_qubits))
         self.theta_rz = nn.Parameter(torch.zeros(circuit_layers, n_qubits))
@@ -119,6 +123,17 @@ class QuantumBottleneck(nn.Module):
             for control, target in _entangle_pairs(self.n_qubits, self.topology, layer):
                 perm = _cnot_permutation(self.n_qubits, control, target, x.device)
                 state = state[:, perm]
+
+            # Training-only dissipation-inspired contraction. This is not a
+            # faithful open-system channel; it is a controlled non-unitary
+            # regularizer that biases the state mildly toward |0...0>.
+            # Experiments anneal strength to zero before evaluation.
+            if self.training and self.training_dissipation > 0.0:
+                gamma = float(self.training_dissipation)
+                anchor = torch.zeros_like(state)
+                anchor[:, 0] = 1.0 + 0.0j
+                state = (1.0 - gamma) * state + gamma * anchor
+                state = state / state.norm(dim=-1, keepdim=True).clamp_min(1e-8)
 
         probs = state.abs().square()
         basis = torch.arange(2**self.n_qubits, device=x.device)
